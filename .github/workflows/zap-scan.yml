@@ -10,15 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout do código
+      # 1️⃣ Checkout do repositório
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Configura o Docker Buildx (necessário para builds)
+      # 2️⃣ Configura Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Build da imagem da aplicação Node
+      # 3️⃣ Build da imagem da aplicação Node.js
       - name: Build app Docker image
         run: docker build -t clickseguro:ci -f Dockerfile .
 
@@ -26,11 +26,11 @@ jobs:
       - name: Create docker network
         run: docker network create zap-net || true
 
-      # 5️⃣ Executa container da aplicação em background
+      # 5️⃣ Executa o container da aplicação
       - name: Run application container
         run: docker run -d --name clickseguro-app --network zap-net clickseguro:ci
 
-      # 6️⃣ Aguarda até que a aplicação esteja acessível
+      # 6️⃣ Aguarda a aplicação estar pronta (até 60 segundos)
       - name: Wait for app to be ready
         run: |
           for i in {1..30}; do
@@ -43,34 +43,37 @@ jobs:
           done
           echo "❌ Aplicação não respondeu a tempo." && exit 1
 
-      # 7️⃣ Cria e ajusta permissões da pasta de relatórios
+      # 7️⃣ Prepara pasta com permissões de escrita
       - name: Prepare writable folder for reports
         run: |
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      # 8️⃣ Executa o OWASP ZAP Baseline Scan
+      # 8️⃣ Executa OWASP ZAP Baseline Scan
       - name: Run OWASP ZAP Baseline Scan
         run: |
           docker run --rm --network zap-net \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://clickseguro-app:8080 -r report.html -j report.json -I
+            zap-baseline.py -t http://clickseguro-app:8080 -r report.html -j report.json -I || true
 
-      # 9️⃣ Verifica se os arquivos de relatório foram gerados
+      # 9️⃣ Verifica se os relatórios foram gerados
       - name: Check generated reports
         run: |
-          echo "📄 Conteúdo do diretório zap_reports:"
+          echo "📄 Conteúdo da pasta zap_reports:"
           ls -l zap_reports || true
 
-      # 🔟 Analisa o JSON e falha o pipeline se houver vulnerabilidades High ou Critical
+      # 🔟 Analisa JSON e falha se encontrar High ou Critical
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           echo "📊 Analisando relatório JSON..."
+          if [ ! -f zap_reports/report.json ]; then
+            echo "::error ::Arquivo report.json não encontrado!"; exit 1;
+          fi
           TOTAL=$(jq '[.site[]?.alerts[]?] | length' zap_reports/report.json)
           ALERTS_JSON=$(jq '[.site[]?.alerts[]?]' zap_reports/report.json)
-          HIGH=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "High")] | length')
           CRIT=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "Critical")] | length')
+          HIGH=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "High")] | length')
           MEDIUM=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "Medium")] | length')
           LOW=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "Low")] | length')
           echo "🔸 Total: $TOTAL | Critical=$CRIT | High=$HIGH | Medium=$MEDIUM | Low=$LOW"
@@ -80,14 +83,14 @@ jobs:
           fi
           echo "✅ Nenhuma vulnerabilidade crítica encontrada."
 
-      # 1️⃣1️⃣ Faz upload dos relatórios como artefato no GitHub
+      # 1️⃣1️⃣ Faz upload dos relatórios como artefato
       - name: Upload ZAP reports as artifact
         uses: actions/upload-artifact@v4
         with:
           name: zap_reports
           path: zap_reports/
 
-      # 1️⃣2️⃣ Limpa containers e rede, mesmo se der erro
+      # 1️⃣2️⃣ Limpa containers e rede (sempre)
       - name: Cleanup
         if: always()
         run: |
