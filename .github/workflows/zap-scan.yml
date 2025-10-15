@@ -42,8 +42,9 @@ jobs:
           docker run --rm --network zap-net \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk/ \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://clickseguro-app:8080 -r /zap/wrk/report.html -j /zap/wrk/report.json -I
+            zap-baseline.py -t http://clickseguro-app:8080 -r report.html -j report.json -I
 
+            
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           TOTAL=$(jq '.site[]?.alerts | length' zap_reports/report.json || echo 0)
