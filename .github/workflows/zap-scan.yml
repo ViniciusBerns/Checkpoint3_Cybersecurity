@@ -1,0 +1,69 @@
+name: OWASP ZAP DAST Scan
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build app Docker image
+        run: docker build -t clickseguro:ci -f Dockerfile .
+
+      - name: Create docker network
+        run: docker network create zap-net || true
+
+      - name: Run app container
+        run: docker run -d --name clickseguro-app --network zap-net clickseguro:ci
+
+      - name: Wait for app to be ready
+        run: |
+          for i in {1..30}; do
+            if docker run --rm --network zap-net byrnedo/alpine-curl -sS http://clickseguro-app:8080 >/dev/null 2>&1; then
+              echo "App pronta"; exit 0;
+            fi
+            echo "Aguardando app... ($i)"; sleep 2;
+          done
+          echo "App não respondeu a tempo"; exit 1;
+
+      - name: Create folder for reports
+        run: mkdir -p zap_reports
+
+      - name: Run OWASP ZAP Baseline Scan
+        run: |
+          docker run --rm --network zap-net \
+            -v ${{ github.workspace }}/zap_reports:/zap/wrk/ \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://clickseguro-app:8080 -r /zap/wrk/report.html -j /zap/wrk/report.json -I
+
+      - name: Parse JSON and fail if HIGH or CRITICAL found
+        run: |
+          TOTAL=$(jq '.site[]?.alerts | length' zap_reports/report.json || echo 0)
+          ALERTS_JSON=$(jq '[.site[]?.alerts[]?]' zap_reports/report.json)
+          HIGH=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "High")] | length')
+          CRIT=$(echo "$ALERTS_JSON" | jq '[.[] | select(.risk == "Critical")] | length')
+          echo "High=$HIGH, Critical=$CRIT, Total=$TOTAL"
+          if [ "$HIGH" -gt 0 ] || [ "$CRIT" -gt 0 ]; then
+            echo "::error ::Vulnerabilidades High/Critical detectadas. Falhando pipeline."; exit 1;
+          fi
+          echo "Sem vulnerabilidades críticas."
+
+      - name: Upload reports as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap_reports
+          path: zap_reports/
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f clickseguro-app || true
+          docker network rm zap-net || true
