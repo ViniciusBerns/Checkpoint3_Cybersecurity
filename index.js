@@ -15,7 +15,7 @@ app.get('/', (req, res) => {
 // Rota de busca com sanitização
 app.get('/search', (req, res) => {
   let q = req.query.q || '';
-  q = validator.escape(q); // evita XSS
+  q = validator.escape(q);
   res.send(`<html><body><h2>Resultados para: ${q}</h2></body></html>`);
 });
 
