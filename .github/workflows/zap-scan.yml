@@ -53,13 +53,21 @@ jobs:
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-full-scan.py -t http://clickseguro-app:8080 \
-            -r report.html -J report.json -w report.md -I -d || true
+            -r scan-summary.html -J report.json -w report.md -I -d || true
 
-      # 8️⃣ Verificar se os relatórios foram gerados
+      # 8️⃣ Gerar relatório detalhado com alertas
+      - name: Generate detailed HTML report with alerts
+        run: |
+          docker run --rm --network zapnet \
+            -v ${{ github.workspace }}/zap_reports:/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-report.py -o /zap/wrk/alert-report.html -f html
+
+      # 9️⃣ Verificar se os relatórios foram gerados
       - name: List ZAP reports
         run: ls -lh zap_reports
 
-      # 9️⃣ Verificar vulnerabilidades no JSON
+      # 🔟 Verificar vulnerabilidades no JSON
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           echo "🔍 Analisando relatório JSON..."
