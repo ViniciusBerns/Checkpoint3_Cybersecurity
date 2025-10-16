@@ -42,9 +42,7 @@ jobs:
 
       # 6️⃣ Preparar pasta para relatórios
       - name: Prepare writable folder for reports
-        run: |
-          mkdir -p zap_reports
-          chmod 777 zap_reports
+        run: mkdir -p zap_reports
 
       # 7️⃣ Rodar o OWASP ZAP Full Scan
       - name: Run OWASP ZAP Full Scan
@@ -52,14 +50,11 @@ jobs:
           docker run --name zap-scanner --network zapnet \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
-            /bin/sh -c "
-              chmod 777 /zap/wrk &&
-              zap-full-scan.py -t http://clickseguro-app:8080 \
-              -r /zap/wrk/report.html \
-              -J /zap/wrk/report.json \
-              -w /zap/wrk/report.md \
-              -I -d
-            "
+            zap-full-scan.py -t http://clickseguro-app:8080 \
+            -r /zap/wrk/report.html \
+            -J /zap/wrk/report.json \
+            -w /zap/wrk/report.md \
+            -I -d
 
       # 8️⃣ Verificar se os relatórios foram gerados
       - name: List ZAP reports
