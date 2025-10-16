@@ -25,6 +25,8 @@ jobs:
       template: traditional-html
       reportDir: /zap/wrk
       reportFile: alert-report.html
-      title: "ZAP Alert Report"
-      description: "Relatório de segurança gerado via Automation Framework"
       theme: dark
+      displayReport: false
+      reportDescription:
+        title: "ZAP Alert Report"
+        description: "Relatório de segurança gerado via Automation Framework"
