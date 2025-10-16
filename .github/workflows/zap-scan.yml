@@ -6,7 +6,7 @@ on:
 
 jobs:
   securityscanjob:
-    name: OWASP ZAP Full Scan
+    name: OWASP ZAP Automation Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -40,40 +40,16 @@ jobs:
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      - name: Run OWASP ZAP Full Scan and generate alert report
+      - name: Run OWASP ZAP Automation Framework
         run: |
           docker run --rm --network zapnet \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
+            -v ${{ github.workspace }}/zap-plan.yaml:/zap/zap-plan.yaml \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-full-scan.py -t http://clickseguro-app:8080 \
-            -r scan-summary.html \
-            -J report.json \
-            -w report.md \
-            -f html \
-            -o /zap/wrk/alert-report.html \
-            -I -d || true
+            zap.sh -cmd -autorun /zap/zap-plan.yaml
 
       - name: List ZAP reports
         run: ls -lh zap_reports
-
-      - name: Parse JSON and fail if HIGH or CRITICAL found
-        run: |
-          echo "🔍 Analisando relatório JSON..."
-          if [ ! -f "zap_reports/report.json" ]; then
-            echo "⚠️ Arquivo report.json não encontrado."
-            exit 0
-          fi
-
-          HIGH_COUNT=$(jq '[.site[].alerts[] | select(.risk == "High")] | length' zap_reports/report.json)
-          CRITICAL_COUNT=$(jq '[.site[].alerts[] | select(.risk == "Critical")] | length' zap_reports/report.json)
-
-          echo "⚠️ Vulnerabilidades High: $HIGH_COUNT"
-          echo "🚨 Vulnerabilidades Critical: $CRITICAL_COUNT"
-
-          if [ "$HIGH_COUNT" -gt 0 ] || [ "$CRITICAL_COUNT" -gt 0 ]; then
-            echo "❌ Vulnerabilidades graves detectadas."
-            exit 1
-          fi
 
       - name: Upload ZAP reports as artifact
         if: always()

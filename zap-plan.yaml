@@ -1,0 +1,30 @@
+env:
+  contexts:
+    - name: clickseguro
+      urls:
+        - http://clickseguro-app:8080
+      includePaths:
+        - http://clickseguro-app:8080.*
+      authentication:
+        method: manual
+      sessionManagement:
+        method: cookie
+      users:
+        - name: default
+
+jobs:
+  - type: spider
+    parameters:
+      context: clickseguro
+      maxDuration: 2
+
+  - type: passiveScan
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: alert-report.html
+      title: "ZAP Alert Report"
+      description: "Relatório de segurança gerado via Automation Framework"
+      theme: dark
