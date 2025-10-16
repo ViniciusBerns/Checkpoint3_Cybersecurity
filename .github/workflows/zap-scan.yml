@@ -5,15 +5,16 @@ on:
   pull_request:
 
 jobs:
-  zap_scan:
+  securityscanjob:
+    name: OWASP ZAP Full Scan
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Clonar código
+      # 1️⃣ Clonar o repositório
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configurar Docker
+      # 2️⃣ Configurar Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -21,46 +22,44 @@ jobs:
       - name: Build app Docker image
         run: docker build -t clickseguro-app .
 
-      # 4️⃣ Subir container da aplicação
+      # 4️⃣ Criar rede Docker customizada
+      - name: Create Docker network
+        run: docker network create zapnet
+
+      # 5️⃣ Subir container da aplicação na rede zapnet
       - name: Run application container
         run: |
-          docker run -d --network host --name clickseguro-app clickseguro-app
+          docker run -d --name clickseguro-app --network zapnet clickseguro-app
           sleep 10
 
-      # 5️⃣ Criar pasta para relatórios e ajustar permissões
+      # 6️⃣ Preparar pasta para relatórios
       - name: Prepare writable folder for reports
         run: |
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      # 6️⃣ Rodar o OWASP ZAP (Full Scan)
+      # 7️⃣ Rodar o OWASP ZAP Full Scan (sem --rm)
       - name: Run OWASP ZAP Full Scan
         run: |
-          docker run --rm --network host \
+          docker run --name zap-scanner --network zapnet \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             /bin/sh -c "
               chmod 777 /zap/wrk &&
-              zap-full-scan.py -t http://localhost:8080 \
+              zap-full-scan.py -t http://clickseguro-app:8080 \
               -r /zap/wrk/report.html \
               -J /zap/wrk/report.json \
               -w /zap/wrk/report.md \
-              -I || true
+              -I -d || true
             "
 
-      # 7️⃣ Se não houver arquivos, tenta copiar de dentro do container temporário (failsafe)
-      - name: Copy missing reports if not found
+      # 8️⃣ Copiar relatórios do container ZAP
+      - name: Copy reports from ZAP container
         run: |
-          if [ -z "$(ls -A zap_reports)" ]; then
-            echo '⚠️ Nenhum relatório encontrado, tentando extrair manualmente...'
-            CONTAINER_ID=$(docker ps -a -q --filter ancestor=ghcr.io/zaproxy/zaproxy:stable | head -n 1)
-            if [ -n "$CONTAINER_ID" ]; then
-              docker cp $CONTAINER_ID:/zap/wrk/. zap_reports/ || true
-            fi
-          fi
+          docker cp zap-scanner:/zap/wrk/. zap_reports/ || true
           ls -lh zap_reports || true
 
-      # 8️⃣ Verificar vulnerabilidades no JSON
+      # 9️⃣ Verificar vulnerabilidades no JSON
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           echo "🔍 Analisando relatório JSON..."
@@ -80,15 +79,18 @@ jobs:
             exit 1
           fi
 
-      # 9️⃣ Upload dos relatórios (sempre executa)
+      # 🔟 Upload dos relatórios como artefato
       - name: Upload ZAP reports as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zap_reports
+          name: zap-reports
           path: zap_reports/
 
-      # 🔟 Encerrar containers
+      # 🔚 Cleanup de containers e rede
       - name: Cleanup
         if: always()
-        run: docker rm -f clickseguro-app || true
+        run: |
+          docker rm -f clickseguro-app || true
+          docker rm -f zap-scanner || true
+          docker network rm zapnet || true
