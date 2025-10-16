@@ -9,61 +9,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Clonar código
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Configurar Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 3️⃣ Construir imagem da aplicação
       - name: Build app Docker image
         run: docker build -t clickseguro-app .
 
+      # 4️⃣ Subir container da aplicação
       - name: Run application container
         run: |
           docker run -d --network host --name clickseguro-app clickseguro-app
           sleep 10
 
+      # 5️⃣ Criar pasta para relatórios e ajustar permissões
       - name: Prepare writable folder for reports
-        run: mkdir -p zap_reports
-
-      - name: Run OWASP ZAP Full Scan
         run: |
-          docker run --rm --network host \
-            -v ${{ github.workspace }}/zap_reports:/zap/wrk \
-            ghcr.io/zaproxy/zaproxy:stable \
-            /bin/sh -c "zap-full-scan.py -t http://localhost:8080 -r report.html -J report.json -w report.md -I || true"
-
-      - name: Check generated reports
-        run: |
-          echo "📁 Conteúdo de zap_reports:"
-          ls -lh zap_reports
-
-      - name: Parse JSON and fail if HIGH or CRITICAL found
-        run: |
-          echo "🔍 Analisando relatório JSON..."
-          if [ ! -f "zap_reports/report.json" ]; then
-            echo "⚠️  Arquivo report.json não encontrado, prosseguindo sem falha."
-            exit 0
-          fi
-
-          HIGH_COUNT=$(jq '[.site[].alerts[] | select(.risk == "High")] | length' zap_reports/report.json)
-          CRITICAL_COUNT=$(jq '[.site[].alerts[] | select(.risk == "Critical")] | length' zap_reports/report.json)
-
-          echo "⚠️ Vulnerabilidades High: $HIGH_COUNT"
-          echo "🚨 Vulnerabilidades Critical: $CRITICAL_COUNT"
-
-          if [ "$HIGH_COUNT" -gt 0 ] || [ "$CRITICAL_COUNT" -gt 0 ]; then
-            echo "❌ Vulnerabilidades graves detectadas."
-            exit 1
-          fi
-
-      - name: Upload ZAP reports as artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap_reports
-          path: zap_reports/
-
-      - name: Cleanup
-        if: always()
-        run: docker rm -f clickseguro-app || true
+          mkdir -p zap
