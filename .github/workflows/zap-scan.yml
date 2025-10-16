@@ -30,7 +30,15 @@ jobs:
       - name: Run application container
         run: |
           docker run -d --name clickseguro-app --network zapnet clickseguro-app
-          sleep 10
+          echo "Aguardando app subir..."
+          for i in {1..30}; do
+            if curl -sSf http://clickseguro-app:8080 >/dev/null; then
+              echo "✅ App está acessível"
+              break
+            fi
+            echo "⏳ Esperando app..."
+            sleep 2
+          done
 
       # 6️⃣ Preparar pasta para relatórios
       - name: Prepare writable folder for reports
@@ -38,7 +46,7 @@ jobs:
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      # 7️⃣ Rodar o OWASP ZAP Full Scan (sem --rm)
+      # 7️⃣ Rodar o OWASP ZAP Full Scan
       - name: Run OWASP ZAP Full Scan
         run: |
           docker run --name zap-scanner --network zapnet \
@@ -50,21 +58,19 @@ jobs:
               -r /zap/wrk/report.html \
               -J /zap/wrk/report.json \
               -w /zap/wrk/report.md \
-              -I -d || true
+              -I -d
             "
 
-      # 8️⃣ Copiar relatórios do container ZAP
-      - name: Copy reports from ZAP container
-        run: |
-          docker cp zap-scanner:/zap/wrk/. zap_reports/ || true
-          ls -lh zap_reports || true
+      # 8️⃣ Verificar se os relatórios foram gerados
+      - name: List ZAP reports
+        run: ls -lh zap_reports
 
       # 9️⃣ Verificar vulnerabilidades no JSON
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           echo "🔍 Analisando relatório JSON..."
           if [ ! -f "zap_reports/report.json" ]; then
-            echo "⚠️ Arquivo report.json não encontrado, mas relatórios HTML/MD podem existir."
+            echo "⚠️ Arquivo report.json não encontrado. Verifique se o alvo respondeu ao ZAP."
             exit 0
           fi
 
