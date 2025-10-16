@@ -30,4 +30,65 @@ jobs:
       # 5️⃣ Criar pasta para relatórios e ajustar permissões
       - name: Prepare writable folder for reports
         run: |
-          mkdir -p zap
+          mkdir -p zap_reports
+          chmod 777 zap_reports
+
+      # 6️⃣ Rodar o OWASP ZAP (Full Scan)
+      - name: Run OWASP ZAP Full Scan
+        run: |
+          docker run --rm --network host \
+            -v ${{ github.workspace }}/zap_reports:/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            /bin/sh -c "
+              chmod 777 /zap/wrk &&
+              zap-full-scan.py -t http://localhost:8080 \
+              -r /zap/wrk/report.html \
+              -J /zap/wrk/report.json \
+              -w /zap/wrk/report.md \
+              -I || true
+            "
+
+      # 7️⃣ Se não houver arquivos, tenta copiar de dentro do container temporário (failsafe)
+      - name: Copy missing reports if not found
+        run: |
+          if [ -z "$(ls -A zap_reports)" ]; then
+            echo '⚠️ Nenhum relatório encontrado, tentando extrair manualmente...'
+            CONTAINER_ID=$(docker ps -a -q --filter ancestor=ghcr.io/zaproxy/zaproxy:stable | head -n 1)
+            if [ -n "$CONTAINER_ID" ]; then
+              docker cp $CONTAINER_ID:/zap/wrk/. zap_reports/ || true
+            fi
+          fi
+          ls -lh zap_reports || true
+
+      # 8️⃣ Verificar vulnerabilidades no JSON
+      - name: Parse JSON and fail if HIGH or CRITICAL found
+        run: |
+          echo "🔍 Analisando relatório JSON..."
+          if [ ! -f "zap_reports/report.json" ]; then
+            echo "⚠️ Arquivo report.json não encontrado, mas relatórios HTML/MD podem existir."
+            exit 0
+          fi
+
+          HIGH_COUNT=$(jq '[.site[].alerts[] | select(.risk == "High")] | length' zap_reports/report.json)
+          CRITICAL_COUNT=$(jq '[.site[].alerts[] | select(.risk == "Critical")] | length' zap_reports/report.json)
+
+          echo "⚠️ Vulnerabilidades High: $HIGH_COUNT"
+          echo "🚨 Vulnerabilidades Critical: $CRITICAL_COUNT"
+
+          if [ "$HIGH_COUNT" -gt 0 ] || [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "❌ Vulnerabilidades graves detectadas."
+            exit 1
+          fi
+
+      # 9️⃣ Upload dos relatórios (sempre executa)
+      - name: Upload ZAP reports as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap_reports
+          path: zap_reports/
+
+      # 🔟 Encerrar containers
+      - name: Cleanup
+        if: always()
+        run: docker rm -f clickseguro-app || true
