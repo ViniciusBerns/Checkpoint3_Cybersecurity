@@ -40,9 +40,11 @@ jobs:
             sleep 2
           done
 
-      # 6️⃣ Preparar pasta para relatórios
+      # 6️⃣ Criar pasta com permissões para relatórios
       - name: Prepare writable folder for reports
-        run: mkdir -p zap_reports
+        run: |
+          mkdir -p zap_reports
+          chmod 777 zap_reports
 
       # 7️⃣ Rodar o OWASP ZAP Full Scan
       - name: Run OWASP ZAP Full Scan
