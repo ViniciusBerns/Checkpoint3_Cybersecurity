@@ -10,23 +10,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Clonar o repositório
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configurar Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Construir imagem da aplicação
       - name: Build app Docker image
         run: docker build -t clickseguro-app .
 
-      # 4️⃣ Criar rede Docker customizada
       - name: Create Docker network
         run: docker network create zapnet
 
-      # 5️⃣ Subir container da aplicação
       - name: Run application container
         run: |
           docker run -d --name clickseguro-app --network zapnet clickseguro-app
@@ -40,31 +35,31 @@ jobs:
             sleep 2
           done
 
-      # 6️⃣ Criar pasta com permissões para relatórios
       - name: Prepare writable folder for reports
         run: |
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      # 7️⃣ Rodar o OWASP ZAP Full Scan com relatório HTML de alertas
-      - name: Run OWASP ZAP Full Scan with alert report
+      - name: Run OWASP ZAP Full Scan (daemon mode)
         run: |
-          docker run --rm --network zapnet \
+          docker run -d --name zap-scanner --network zapnet \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-full-scan.py -t http://clickseguro-app:8080 \
-            -r scan-summary.html \
-            -J report.json \
-            -w report.md \
-            -f html \
-            -o /zap/wrk/alert-report.html \
-            -I -d || true
+            -r scan-summary.html -J report.json -w report.md -I -d
 
-      # 8️⃣ Verificar se os relatórios foram gerados
+      - name: Wait for ZAP to finish
+        run: sleep 60
+
+      - name: Generate alert report using ZAP API
+        run: |
+          docker exec zap-scanner curl -s \
+            "http://localhost:8080/OTHER/report/?format=html&title=ZAP%20Alert%20Report&template=traditional-html&theme=dark&description=Relatorio%20de%20Seguranca" \
+            -o /zap/wrk/alert-report.html
+
       - name: List ZAP reports
         run: ls -lh zap_reports
 
-      # 9️⃣ Verificar vulnerabilidades no JSON
       - name: Parse JSON and fail if HIGH or CRITICAL found
         run: |
           echo "🔍 Analisando relatório JSON..."
@@ -84,7 +79,6 @@ jobs:
             exit 1
           fi
 
-      # 🔟 Upload dos relatórios como artefato
       - name: Upload ZAP reports as artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -92,9 +86,9 @@ jobs:
           name: zap-reports
           path: zap_reports/
 
-      # 🔚 Cleanup
       - name: Cleanup
         if: always()
         run: |
           docker rm -f clickseguro-app || true
+          docker rm -f zap-scanner || true
           docker network rm zapnet || true
