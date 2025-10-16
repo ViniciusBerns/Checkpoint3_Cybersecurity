@@ -32,3 +32,6 @@ jobs:
       reportDescription:
         title: "ZAP Alert Report"
         description: "Relatório de segurança gerado via OWASP Automation Framework"
+      sites:
+        - http://clickseguro-app:8080
+
