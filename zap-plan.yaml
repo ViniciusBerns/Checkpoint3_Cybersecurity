@@ -18,7 +18,9 @@ jobs:
       context: clickseguro
       maxDuration: 2
 
-  - type: passiveScan
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 100
 
   - type: report
     parameters:
@@ -29,4 +31,4 @@ jobs:
       displayReport: false
       reportDescription:
         title: "ZAP Alert Report"
-        description: "Relatório de segurança gerado via Automation Framework"
+        description: "Relatório de segurança gerado via OWASP Automation Framework"
