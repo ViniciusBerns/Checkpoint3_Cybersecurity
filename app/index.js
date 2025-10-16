@@ -7,7 +7,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Rota principal
+// Página principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -32,7 +32,7 @@ app.post('/login', (req, res) => {
 // Rota de contato com validação
 app.post('/contato', (req, res) => {
   const { mensagem } = req.body;
-  if (!mensagem || mensagem.length > 500) {
+  if (!mensagem || mensagem.length > 500 || !validator.isAscii(mensagem)) {
     return res.status(400).send('Mensagem inválida.');
   }
   const safeMsg = validator.escape(mensagem);
