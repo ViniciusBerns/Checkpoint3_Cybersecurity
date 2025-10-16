@@ -55,13 +55,12 @@ jobs:
             zap-full-scan.py -t http://clickseguro-app:8080 \
             -r scan-summary.html -J report.json -w report.md -I -d || true
 
-      # 8️⃣ Gerar relatório detalhado com alertas
-      - name: Generate detailed HTML report with alerts
+      # 8️⃣ Gerar relatório HTML com alertas via API
+      - name: Generate alert report using ZAP API
         run: |
-          docker run --rm --network zapnet \
-            -v ${{ github.workspace }}/zap_reports:/zap/wrk \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-report.py -o /zap/wrk/alert-report.html -f html
+          docker exec zap-scanner curl -s \
+            "http://localhost:8080/OTHER/report/?format=html&title=ZAP%20Alert%20Report&template=traditional-html&theme=dark&description=Relatorio%20de%20Seguranca" \
+            -o /zap/wrk/alert-report.html
 
       # 9️⃣ Verificar se os relatórios foram gerados
       - name: List ZAP reports
