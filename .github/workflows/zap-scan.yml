@@ -40,22 +40,18 @@ jobs:
           mkdir -p zap_reports
           chmod 777 zap_reports
 
-      - name: Run OWASP ZAP Full Scan (daemon mode)
+      - name: Run OWASP ZAP Full Scan and generate alert report
         run: |
-          docker run -d --name zap-scanner --network zapnet \
+          docker run --rm --network zapnet \
             -v ${{ github.workspace }}/zap_reports:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-full-scan.py -t http://clickseguro-app:8080 \
-            -r scan-summary.html -J report.json -w report.md -I -d
-
-      - name: Wait for ZAP to finish
-        run: sleep 60
-
-      - name: Generate alert report using ZAP API
-        run: |
-          docker exec zap-scanner curl -s \
-            "http://localhost:8080/OTHER/report/?format=html&title=ZAP%20Alert%20Report&template=traditional-html&theme=dark&description=Relatorio%20de%20Seguranca" \
-            -o /zap/wrk/alert-report.html
+            -r scan-summary.html \
+            -J report.json \
+            -w report.md \
+            -f html \
+            -o /zap/wrk/alert-report.html \
+            -I -d || true
 
       - name: List ZAP reports
         run: ls -lh zap_reports
@@ -90,5 +86,4 @@ jobs:
         if: always()
         run: |
           docker rm -f clickseguro-app || true
-          docker rm -f zap-scanner || true
           docker network rm zapnet || true
